@@ -1,0 +1,1253 @@
+#--------------------------------------------
+#			Current Commands
+#--------------------------------------------
+
+#----Accident Control----
+
+#//limit (number) - Sets a personal limit of blocks per action
+#//undo (number) - Undo a certain number of past actions
+#//redo - reverse an undo
+#//clearhistory - Clears Undo and Redo data
+
+#----Selection----
+
+#//wand
+#//togglewand
+#//pos1 (x) (y) (z)
+#//pos2 (x) (y) (z)
+#//hpos1
+#//hpos2
+#//size
+#//count <item>
+#//distr
+#//expand <number> (direction)
+#//expand <number> <number> (direction)
+#//contract <number> (direction)
+#//contract <number> <number> (direction)
+#//shift <number> (direction)
+#//outlet <number>
+#//inlet <number>
+
+#----Region Operations----
+
+#//set <item>
+#//cut
+#//sphere <item> <radius>
+#//hsphere <item> <radius>
+#//cyl <item> <radius> (height)
+#//hcyl <item> <radius> (height)
+#//replace <item> - Replaces all air with specified item
+#//replace <from-item> <to-item> - Replaces all instances of from-item with to-item
+#//overlay <item> - Places a layer of <item> on top of every block in the selection
+#//walls <item>
+#//outline <item>
+
+#-----Clipboard-----
+
+#//copy
+
+#--------------------------------------------
+#			Functions
+#--------------------------------------------
+
+options:
+	version: 1.0
+
+
+variables:
+	{bps} = 160
+	{limit} = 100000
+
+on load:
+	delete {directions::*}
+	add "east" to {directions::*}
+	add "west" to {directions::*}
+	add "north" to {directions::*}
+	add "south" to {directions::*}
+	add "up" to {directions::*}
+	add "down" to {directions::*}
+
+function abs(v1: Number) :: Number:
+	if {_v1} < 0:
+		set {_v1} to {_v1} - (2*{_v1})
+	return {_v1}
+
+function low(v1: Number, v2: Number) :: Number:
+	if {_v1} < {_v2}:
+		return {_v1}
+	else:
+		return {_v2}
+
+function high(v1: Number, v2: Number) :: Number:
+	if {_v1} > {_v2}:
+		return {_v1}
+	else:
+		return {_v2}
+
+function posIsSet(p: Player) :: Boolean:
+	if {pos1.x.%{_p}%} is set:
+		if {pos2.x.%{_p}%} is set:
+			return true
+	return false
+
+function allValidItems(list: String) :: Boolean:
+	set {_items::*} to {_list} split at ","
+	set {_x} to 0
+	loop (size of {_items::*}) times:
+		if ({_items::%loop-number%} parsed as an item) is an item:
+			add 1 to {_x}
+	if {_x} < (size of {_items::*}):
+		return false
+	else:
+		return true
+
+function invalidItem(list: String) :: String:
+	set {_items::*} to {_list} split at ","
+	loop (size of {_items::*}) times:
+		if ({_items::%loop-number%} parsed as an item) is an item:
+			set {_x} to 0
+		else:
+			return "%{_items::%loop-number%}%"
+
+function parseMultiItem(p: Player, list: String) :: Item:
+	set {_items::*} to {_list} split at ","
+	set {_rand} to a random integer between 1 and (size of {_items::*})
+	return ({_items::%{_rand}%} parsed as an item)
+
+function oppositeDir(dir: String) :: String:
+	if {_dir} is "west":
+		return "east"
+	else if {_dir} is "east":
+		return "west"
+	else if {_dir} is "north":
+		return "south"
+	else if {_dir} is "south":
+		return "north"
+	else if {_dir} is "up":
+		return "down"
+	else if {_dir} is "down":
+		return "up"
+
+function actionBarProgress(p: Player, current: Number, max: Number):
+	set {_barSymbol} to "█"
+	set {_progressNum} to rounded down ({_current}/{_max}*10)
+	loop {_progressNum} times:
+		set {_bar::%loop-number%} to "&a%{_barSymbol}%"
+	loop (10 - {_progressNum}) times:
+		set {_nonProgressNum} to {_progressNum} + loop-number
+		set {_bar::%{_nonProgressNum}%} to "&7%{_barSymbol}%"
+	set {_progress} to join {_bar::*} by ""
+	set {_percent} to ({_current}/{_max})*100
+	send a action bar with "%{_progress}%   &d%{_percent}%%% Complete" to {_p}
+
+function actionBarComplete(p: Player):
+	set {_barSymbol} to "█"
+	loop 10 times:
+		set {_bar::%loop-number%} to "&a%{_barSymbol}%"
+	set {_progress} to join {_bar::*} by ""
+	set {_percent} to 100
+	send a action bar with "%{_progress}%   &d%{_percent}%%% Complete!" to {_p}
+
+function setPos(posNum: Number, p: Player, loc: Location):
+	set {pos%{_posNum}%.x.%{_p}%} to x-coordinate of {_loc}
+	set {pos%{_posNum}%.y.%{_p}%} to y-coordinate of {_loc}
+	set {pos%{_posNum}%.z.%{_p}%} to z-coordinate of {_loc}
+	message "&dPosition %{_posNum}% is set to %{_loc}%" to {_p}
+
+function placeBlocks(type: String, p: Player):
+	set {_count} to 0
+	set {_currentCount} to 0
+	set {_redoSize} to (size of {Skwe.redo.%{_p}%::*})
+	set {_undoSize} to (size of {Skwe.undo.%{_p}%::*})
+	if {_type} is "undo":
+		set {_size} to {_undoSize}
+		add 1 to {_redoSize}
+	if {_type} is "redo":
+		set {_size} to {_redoSize}
+		add 1 to {_undoSize}
+	set {_totalVolume} to size of {Skwe.%{_type}%.%{_p}%::%{_size}%::*}
+	loop {Skwe.%{_type}%.%{_p}%::%{_size}%::*}:
+		set {_li::*} to loop-index split at ","
+		set {_x} to {_li::1} parsed as a Number
+		set {_y} to {_li::2} parsed as a Number
+		set {_z} to {_li::3} parsed as a number
+		set {_item} to loop-value
+		set {_loc} to location({_x}, {_y}, {_z}, world("%{_p}'s world%"))
+		if {_type} is "undo":
+			set {Skwe.redo.%{_p}%::%{_redoSize}%::%loop-index%} to type of block at location of {_loc}
+		if {_type} is "redo":
+			set {Skwe.undo.%{_p}%::%{_undoSize}%::%loop-index%} to type of block at location of {_loc}
+		if block at {_loc} is not {_item}:
+			set block at {_loc} to {_item}
+		actionBarProgress({_p}, {_currentCount}, {_totalVolume})
+		add 1 to {_count}
+		add 1 to {_currentCount}
+		if {_count} >= {bps}:
+			set {_count} to 0
+			wait 1 tick
+	actionBarComplete({_p})
+	if {_type} is "undo":
+		delete {Skwe.%{_type}%.%{_p}%::%{_undoSize}%::*}
+		delete {Skwe.%{_type}%.%{_p}%::%{_undoSize}%}
+	if {_type} is "redo":
+		delete {Skwe.%{_type}%.%{_p}%::%{_redoSize}%::*}
+		delete {Skwe.%{_type}%.%{_p}%::%{_redoSize}%}
+
+function setUndo(p: Player, loc: Location, index: Number):
+	set {_x} to x-coordinate of {_loc}
+	set {_y} to y-coordinate of {_loc}
+	set {_z} to z-coordinate of {_loc}
+	set {_coords} to "%{_x}%,%{_y}%,%{_z}%"
+	set {_block} to type of block at location of {_loc}
+	set {Skwe.undo.%{_p}%::%{_index}%::%{_coords}%} to {_block}
+
+function setCopy(p: Player, loc: Location, dir: Direction):
+	set {_x} to x-coordinate of {_loc}
+	set {_y} to y-coordinate of {_loc}
+	set {_z} to z-coordinate of {_loc}
+	set {_coords} to "%{_x}%,%{_y}%,%{_z}%,%{_dir}%"
+	set {_block} to type of block at location of {_loc}
+	set {Skwe.copy.%{_p}%::%{_coords}%} to {_block}
+
+function paste(p: Player, type: String):
+	broadcast "paste"
+
+function resizePos(p: Player, coord: String, negativeDir: Boolean) :: Number:
+	if {_negativeDir} is false:
+		if {pos1.%{_coord}%.%{_p}%} > {pos2.%{_coord}%.%{_p}%}:
+			return 1
+		else:
+			return 2
+	else if {_negativeDir} is true:
+		if {pos1.%{_coord}%.%{_p}%} < {pos2.%{_coord}%.%{_p}%}:
+			return 1
+		else:
+			return 2
+
+#east towards positive x-coordinate
+#south towards positive z-coordinate
+#west towards negative x-coordinate
+#north towards negaitve z-coordinate
+function resizeSelection(p: Player, dir: String, n1: Integer, n2: Integer, type: String):
+	if {_dir} is "up" or "east" or "south" or "e" or "s":
+		if {_type} is "expand" or "expandout":
+			set {_negativeDir} to false
+		else if {_type} is "contract" or "contractin":
+			set {_negativeDir} to true
+
+		if {_dir} is "up":
+			set {_coord} to "y"
+
+		else if {_dir} is "east" or "e":
+			set {_coord} to "x"
+
+		else if {_dir} is "south" or "s":
+			set {_coord} to "z"
+
+
+	else if {_dir} is "down" or "west" or "north" or "w" or "n":
+		if {_type} is "expand" or "expandout":
+			set {_negativeDir} to true
+		else if {_type} is "contract" or "contractin":
+			set {_negativeDir} to false
+
+		if {_dir} is "down":
+			set {_coord} to "y"
+
+		else if {_dir} is "west" or "w":
+			set {_coord} to "x"
+
+		else if {_dir} is "north" or "n":
+			set {_coord} to "z"
+
+	set {_posforward} to resizePos({_p}, {_coord}, {_negativeDir})
+	if {_posforward} = 1:
+		set {_posreverse} to 2
+	else if {_posforward} = 2:
+		set {_posreverse} to 1
+
+	if {_type} is "expand" or "expandout":
+		if {_negativeDir} is true:
+			subtract {_n1} from {pos%{_posforward}%.%{_coord}%.%{_p}%}
+			add {_n2} to {pos%{_posreverse}%.%{_coord}%.%{_p}%}
+		else if {_negativeDir} is false:
+			add {_n1} to {pos%{_posforward}%.%{_coord}%.%{_p}%}
+			subtract {_n2} from {pos%{_posreverse}%.%{_coord}%.%{_p}%}
+		if {_n2} = 0:
+			if {_type} is "expand":
+				message "&dExpanded selection %{_n1}% block(s) %{_dir}%" to {_p}
+			else if {_type} is "expandout":
+				message "&dExpanded selection %{_n1}% block(s) in all directions." to {_p}
+		else:
+			set {_dir2} to oppositeDir({_dir})
+			message "&dExpanded selection %{_n1}% block(s) %{_dir}% and %{_n2}% block(s) %{_dir2}%" to {_p}
+
+	else if {_type} is "contract" or "contractin":
+		if {_negativeDir} is false:
+			subtract {_n1} from {pos%{_posforward}%.%{_coord}%.%{_p}%}
+			add {_n2} to {pos%{_posreverse}%.%{_coord}%.%{_p}%}
+		else if {_negativeDir} is true:
+			add {_n1} to {pos%{_posforward}%.%{_coord}%.%{_p}%}
+			subtract {_n2} from {pos%{_posreverse}%.%{_coord}%.%{_p}%}
+		if {_n2} = 0:
+			if {_type} is "contract":
+				message "&dContracted selection %{_n1}% block(s) %{_dir}%" to {_p}
+			else if {_type} is "contractin":
+				message "&dContracted selection %{_n1}% block(s) in all directions." to {_p}
+		else:
+			set {_dir2} to oppositeDir({_dir})
+			message "&dContracted selection %{_n1}% block(s) %{_dir}% and %{_n2}% block(s) %{_dir2}%" to {_p}
+
+
+function shiftSelection(p: Player, dir: String, n: Integer):
+	if {_dir} is "up" or "east" or "south" or "e" or "s":
+		set {_negativeDir} to false
+
+		if {_dir} is "up":
+			set {_coord} to "y"
+
+		else if {_dir} is "east" or "e":
+			set {_coord} to "x"
+
+		else if {_dir} is "south" or "s":
+			set {_coord} to "z"
+
+
+	else if {_dir} is "down" or "west" or "north" or "w" or "n":
+		set {_negativeDir} to true
+
+		if {_dir} is "down":
+			set {_coord} to "y"
+
+		else if {_dir} is "west" or "w":
+			set {_coord} to "x"
+
+		else if {_dir} is "north" or "n":
+			set {_coord} to "z"
+
+	if {_negativeDir} is false:
+		add {_n} to {pos1.%{_coord}%.%{_p}%}
+		add {_n} to {pos2.%{_coord}%.%{_p}%}
+	else if {_negativeDir} is true:
+		subtract {_n} from {pos1.%{_coord}%.%{_p}%}
+		subtract {_n} from {pos2.%{_coord}%.%{_p}%}
+	message "&dSelection shifted %{_n}% block(s) %{_dir}%" to {_p}
+
+
+function canOverlay(loc: Location, min: Number, max: Number) :: Number:
+	set y-coordinate of {_loc} to {_max}
+	if type of block at location of {_loc} is not air:
+		return -1
+	loop ({_max} - {_min} + 1) times:
+		if type of block at location of {_loc} is not air:
+			if y-coordinate of {_loc} is not {_max}:
+				return (y-coordinate of {_loc} + 1)
+		else if y-coordinate of {_loc} is {_min}:
+			subtract 1 from y-coordinate of {_loc}
+			if type of block at location of {_loc} is not air:
+				return (y-coordinate of {_loc} + 1)
+		subtract 1 from y-coordinate of {_loc}
+	return -1
+
+
+function expandContract(p:Player, cmd: String, arg1: String, arg2: String, arg3: String):
+	if {_arg1} is not "none":
+		if {_arg1} parsed as a number is a number:
+			if {_arg2} is not "none":
+				if {_arg2} parsed as a number is a number:
+					if {_arg3} is not "none":
+						if {_arg3} is "east" or "west" or "north" or "south" or "up" or "down" or "e" or "w" or "n" or "s":
+							resizeSelection({_p}, {_arg3}, ({_arg1} parsed as an integer), ({_arg2} parsed as an integer), "%{_cmd}%")
+						else:
+							message "&dNot a valid direction. (use east/west/north/south/up/down)" to {_p}
+					else:
+						if {_p}'s pitch < -65:
+							resizeSelection({_p}, "up", ({_arg1} parsed as an integer), ({_arg2} parsed as an integer), "%{_cmd}%")
+						else if {_p}'s pitch > 65:
+							resizeSelection({_p}, "down", ({_arg1} parsed as an integer), ({_arg2} parsed as an integer), "%{_cmd}%")
+						else:
+							resizeSelection({_p}, "%horizontal facing of {_p}%", ({_arg1} parsed as an integer), ({_arg2} parsed as an integer), "%{_cmd}%")
+				else:
+					if {_arg2} is "east" or "west" or "north" or "south" or "up" or "down" or "e" or "w" or "n" or "s":
+						resizeSelection({_p}, {_arg2}, ({_arg1} parsed as an integer), 0, "%{_cmd}%")
+					else:
+						message "&dNot a valid direction. (use east/west/north/south/up/down)" to {_p}
+			else:
+				if {_p}'s pitch < -65:
+					resizeSelection({_p}, "up", ({_arg1} parsed as an integer), 0, "%{_cmd}%")
+				else if {_p}'s pitch > 65:
+					resizeSelection({_p}, "down", ({_arg1} parsed as an integer), 0, "%{_cmd}%")
+				else:
+					resizeSelection({_p}, "%horizontal facing of {_p}%", ({_arg1} parsed as an integer), 0, "%{_cmd}%")
+		else if {_cmd} is "expand":
+			if {_arg1} is "vert" or "vertical":
+				set {pos1.y.%{_p}%} to 0
+				set {pos2.y.%{_p}%} to 256
+				message "&dSelection has been %{_cmd}%ed from bedrock to sky limit." to {_p}
+	else:
+		message "&d//%{_cmd}% <number> (direction)" to {_p}
+		message "&d//%{_cmd}% <number> <number> (direction)" to {_p}
+
+
+function TwoDimOperation(type: String, p:Player, i: String):
+	if allValidItems({_i}):
+		#Initialize Bounds
+		set {_xlow} to low({pos1.x.%{_p}%},{pos2.x.%{_p}%})
+		set {_ylow} to low({pos1.y.%{_p}%},{pos2.y.%{_p}%})
+		set {_zlow} to low({pos1.z.%{_p}%},{pos2.z.%{_p}%})
+		set {_yhigh} to high({pos1.y.%{_p}%},{pos2.y.%{_p}%})
+		set {_xhigh} to high({pos1.x.%{_p}%},{pos2.x.%{_p}%})
+		set {_zhigh} to high({pos1.z.%{_p}%},{pos2.z.%{_p}%})
+		set {_xdiff} to abs({pos1.x.%{_p}%} - {pos2.x.%{_p}%}) + 1
+		set {_ydiff} to abs({pos1.y.%{_p}%} - {pos2.y.%{_p}%}) + 1
+		set {_zdiff} to abs({pos1.z.%{_p}%} - {pos2.z.%{_p}%}) + 1
+		#message "&7LOW: %{_xlow}% %{_ylow}% %{_zlow}% | &7HIGH: %{_xhigh}% %{_yhigh}% %{_zhigh}% &7DIFF: %{_xdiff}% %{_ydiff}% %{_zdiff}%" to {_p}
+		set {_count} to 0
+		set {_currentCount} to 0
+		set {_index} to (size of {Skwe.undo.%{_p}%::*} + 1)
+
+		#Set totalVolume
+		if {_type} is "overlay":
+			set {_totalVolume} to {_xdiff}*{_ydiff}*{_zdiff}
+		else if {_type} is "walls":
+			set {_totalVolume} to ((2*{_xdiff}) + (2*{_zdiff}))*{_ydiff}
+		else if {_type} is "outline":
+			set {_totalVolume} to ((2*{_xdiff}) + (2*{_zdiff}))*({_ydiff} - 2) + 2*({_xdiff}*{_zdiff})
+
+		if {_totalVolume} > {limit}:
+			if {_p} doesn't have permission "Skwe.limit.exempt":
+				message "&dAction cannot be performed as it exceeds the max block limit per action." to {_p}
+				stop
+		if {Skwe.limit.%{_p}%} is set:
+			if {_totalVolume} > {Skwe.limit.%{_p}%}:
+				message "&dAction cannot be performed as it exceeds the max block limit per action." to {_p}
+				stop
+
+		#2D Loops
+		if {_type} is "outline":
+			set {_loopnum} to 2
+		else:
+			set {_loopnum} to 1
+		loop {_loopnum} times:
+			loop {_xdiff} times:
+				loop {_zdiff} times:
+					set {_xnum} to -1 + loop-number-2
+					set {_znum} to -1 + loop-number-3
+					set {_x} to {_xlow} + {_xnum}
+					set {_z} to {_zlow} + {_znum}
+					if {_type} is "overlay":
+						set {_y} to {_ylow}
+						set {_loc} to location({_x}, {_y}, {_z}, world("%{_p}'s world%"))
+						set {_canOverlay} to canOverlay({_loc}, {_ylow}, {_yhigh})
+						if {_canOverlay} > 0:
+							set y-coordinate of {_loc} to {_canOverlay}
+							setUndo({_p}, {_loc}, {_index})
+							set block at {_loc} to parseMultiItem({_p}, {_i})
+
+						actionBarProgress({_p}, {_currentCount}, {_totalVolume})
+						add 1 to {_count}
+						add 1 to {_currentCount}
+						if {_count} >= {bps}:
+							set {_count} to 0
+							wait 1 tick
+
+					else if {_type} is "walls":
+						set {_y} to {_ylow}
+						if {_x} is {_xlow}:
+							set {_loc} to location({_x}, {_y}, {_z}, world("%{_p}'s world%"))
+							add {_loc} to {_walls::*}
+						else if {_x} is {_xhigh}:
+							set {_loc} to location({_x}, {_y}, {_z}, world("%{_p}'s world%"))
+							add {_loc} to {_walls::*}
+						else if {_z} is {_zlow}:
+							set {_loc} to location({_x}, {_y}, {_z}, world("%{_p}'s world%"))
+							add {_loc} to {_walls::*}
+						else if {_z} is {_zhigh}:
+							set {_loc} to location({_x}, {_y}, {_z}, world("%{_p}'s world%"))
+							add {_loc} to {_walls::*}
+
+					else if {_type} is "outline":
+						if loop-number-1 = 1:
+							set {_y} to {_ylow}
+							set {_loc} to location({_x}, {_y}, {_z}, world("%{_p}'s world%"))
+							setUndo({_p}, {_loc}, {_index})
+							set block at {_loc} to parseMultiItem({_p}, {_i})
+							actionBarProgress({_p}, {_currentCount}, {_totalVolume})
+							if {_x} is {_xlow}:
+								add {_loc} to {_outline::*}
+							else if {_x} is {_xhigh}:
+								add {_loc} to {_outline::*}
+							else if {_z} is {_zlow}:
+								add {_loc} to {_outline::*}
+							else if {_z} is {_zhigh}:
+								add {_loc} to {_outline::*}
+
+						else if loop-number-1 = 2:
+							set {_y} to {_yhigh}
+							set {_loc2} to location({_x}, {_y}, {_z}, world("%{_p}'s world%"))
+							setUndo({_p}, {_loc2}, {_index})
+							set block at {_loc2} to parseMultiItem({_p}, {_i})
+							actionBarProgress({_p}, {_currentCount}, {_totalVolume})
+
+						add 1 to {_count}
+						add 1 to {_currentCount}
+						if {_count} >= {bps}:
+							set {_count} to 0
+							wait 1 tick
+
+		#Post 2D Loop Actions
+		if {_type} is "walls":			
+			loop {_ydiff} times:
+				loop {_walls::*}:
+					set {_loc} to loop-value-2
+					add (-1 + loop-number-1) to y-coordinate of {_loc}
+					actionBarProgress({_p}, {_currentCount}, {_totalVolume})
+					setUndo({_p}, {_loc}, {_index})
+					set block at {_loc} to parseMultiItem({_p}, {_i})
+					add 1 to {_currentCount}
+					add 1 to {_count}
+					if {_count} >= {bps}:
+						set {_count} to 0
+						wait 1 tick
+
+		else if {_type} is "outline":
+			loop {_ydiff} - 2 times:
+				loop {_outline::*}:
+					set {_loc} to loop-value-2
+					add loop-number-1 to y-coordinate of {_loc}
+					actionBarProgress({_p}, {_currentCount}, {_totalVolume})
+					setUndo({_p}, {_loc}, {_index})
+					set block at {_loc} to parseMultiItem({_p}, {_i})
+					add 1 to {_currentCount}
+					add 1 to {_count}
+					if {_count} >= {bps}:
+						set {_count} to 0
+						wait 1 tick
+
+		actionBarComplete({_p})
+	else:
+		message "&dInvalid usage: %invalidItem({_i})% is not an item." to {_p}
+
+
+
+
+function ThreeDimOperation(type: String, p:Player, i: String, toItem: String):
+	if allValidItems({_i}):
+		#Initialize Bounds
+		set {_xlow} to low({pos1.x.%{_p}%},{pos2.x.%{_p}%})
+		set {_ylow} to low({pos1.y.%{_p}%},{pos2.y.%{_p}%})
+		set {_zlow} to low({pos1.z.%{_p}%},{pos2.z.%{_p}%})
+		set {_yhigh} to high({pos1.y.%{_p}%},{pos2.y.%{_p}%})
+		set {_xhigh} to high({pos1.x.%{_p}%},{pos2.x.%{_p}%})
+		set {_zhigh} to high({pos1.z.%{_p}%},{pos2.z.%{_p}%})
+		set {_xdiff} to abs({pos1.x.%{_p}%} - {pos2.x.%{_p}%}) + 1
+		set {_ydiff} to abs({pos1.y.%{_p}%} - {pos2.y.%{_p}%}) + 1
+		set {_zdiff} to abs({pos1.z.%{_p}%} - {pos2.z.%{_p}%}) + 1
+		set {_count} to 0
+		set {_totalVolume} to {_xdiff}*{_ydiff}*{_zdiff}
+		if {_totalVolume} > {limit}:
+			if {_p} doesn't have permission "Skwe.limit.exempt":
+				message "&dAction cannot be performed as it exceeds the max block limit per action." to {_p}
+				stop
+		if {Skwe.limit.%{_p}%} is set:
+			if {_totalVolume} > {Skwe.limit.%{_p}%}:
+				message "&dAction cannot be performed as it exceeds the max block limit per action." to {_p}
+				stop	
+		set {_currentCount} to 0
+		set {_index} to (size of {Skwe.undo.%{_p}%::*} + 1)
+		set {_items::*} to {_i} split at ","
+		set {_blockCount::1} to 0
+		loop {_xdiff} times:
+			loop {_ydiff} times:
+				loop {_zdiff} times:
+					set {_xnum} to -1 + loop-number-1
+					set {_ynum} to -1 + loop-number-2
+					set {_znum} to -1 + loop-number-3
+					set {_x} to {_xlow} + {_xnum}
+					set {_y} to {_ylow} + {_ynum}
+					set {_z} to {_zlow} + {_znum}
+					set {_loc} to location({_x}, {_y}, {_z}, world("%{_p}'s world%"))
+
+					if {_type} is "set":
+						setUndo({_p}, {_loc}, {_index})
+						set block at {_loc} to parseMultiItem({_p}, {_i})
+						actionBarProgress({_p}, {_currentCount}, {_totalVolume})
+						add 1 to {_count}
+						add 1 to {_currentCount}
+						if {_count} >= {bps}:
+							set {_count} to 0
+							wait 1 tick
+
+					else if {_type} is "count":
+						loop (size of {_items::*}) times:
+							if block at {_loc} is ({_items::%loop-number-4%} parsed as an item):
+								add 1 to {_blockCount::%loop-number-4%}
+
+					else if {_type} is "distr":
+						set {_item} to "%type of block at location of {_loc}%"
+						if {_distr::%{_item}%} is set:
+							add 1 to {_distr::%{_item}%}
+						else:
+							set {_distr::%{_item}%} to 1
+
+					else if {_type} is "replace":
+						if {_toItem} is not "none":
+							loop {_items::*}:
+								set {_lv} to loop-value-4
+								if block at {_loc} is ({_lv} parsed as an item):
+									setUndo({_p}, {_loc}, {_index})
+									set block at {_loc} to parseMultiItem({_p}, {_toItem})
+									actionBarProgress({_p}, {_currentCount}, {_totalVolume})
+									add 1 to {_count}
+						else:
+							if block at {_loc} is air:
+								setUndo({_p}, {_loc}, {_index})
+								set block at {_loc} to parseMultiItem({_p}, {_i})
+								actionBarProgress({_p}, {_currentCount}, {_totalVolume})
+								add 1 to {_count}
+						add 1 to {_currentCount}
+						if {_count} >= {bps}:
+							set {_count} to 0
+							wait 1 tick
+
+
+		#Post Loop Action
+		if {_type} is "set" or "replace":
+			actionBarComplete({_p})
+		else if {_type} is "count":
+			loop (size of {_items::*}) times:
+				set {_b} to {_blockCount::%loop-number%}
+				set {_i} to "%{_items::%loop-number%} parsed as an item%"
+				replace all " block" in {_i} with ""
+				message "&d%{_b}% %{_i}% block(s) within the selection." to {_p}
+		else if {_type} is "distr":
+			message "&8Block Distribution:" to {_p}
+			loop {_distr::*}:
+				message "&d%loop-index%: %(loop-value/{_totalVolume}) * 100%%%" to {_p}
+
+	else:
+		message "&dInvalid usage: %invalidItem({_i})% is not an item." to {_p}
+
+
+
+
+#--------------------------------------------
+#			Events
+#--------------------------------------------
+
+#Setting pos2
+on rightclick:
+	if player has permission "Skwe.basic.wand":
+		if {Skwe.wandtoggle.%player%} is not false:
+			if clicked block is set:
+				if player's tool is wooden axe:
+					setPos(2, player, location of clicked block)
+					cancel event
+
+#Setting pos1
+on leftclick:
+	if player has permission "Skwe.basic.wand":
+		if {Skwe.wandtoggle.%player%} is not false:
+			if clicked block is set:
+				if player's tool is wooden axe:
+					setPos(1, player, location of clicked block)
+					cancel event
+
+on disconnect:
+	if {Skwe.copy.%player%::*} is set:
+		delete {Skwe.copy.%player%::*}
+	if {Skwe.redo.%player%::*} is set:
+		loop (size of {Skwe.redo.%player%::*}) times:
+			delete {Skwe.redo.%player%::%loop-number%::*}
+		delete {Skwe.redo.%player%::*}
+	if {Skwe.undo.%player%::*} is set:
+		loop (size of {Skwe.undo.%player%::*}) times:
+			delete {Skwe.undo.%player%::%loop-number%::*}
+		delete {Skwe.undo.%player%::*}
+	delete {pos1.x.%player%}
+	delete {pos1.y.%player%}
+	delete {pos1.z.%player%}
+	delete {pos2.x.%player%}
+	delete {pos2.y.%player%}
+	delete {pos2.z.%player%}
+
+#--------------------------------------------
+#			Commands
+#--------------------------------------------
+
+#----Accident Control----
+
+
+command //limit [<integer>]:
+	permission: Skwe.basic.limit
+	description: Limits the amount of blocks you can place in a single action
+	trigger:
+		if arg 1 is set:
+			if arg 1 > 0:
+				if arg 1 <= {limit}:
+					set {Skwe.limit.%player%} to arg 1
+					message "&dPersonal limit has been set to %arg-1% block(s)"
+				else:
+					message "&dPersonal limit cannot be higher than globel limit of %{limit}%"
+			else:
+				message "&dLimit must be a positive number"
+		else:
+			delete {Skwe.limit.%player%}
+			message "&dLimit has been reset to global limit."
+
+
+command //undo [<text="1">]:
+	description: Reverse a previously completed world edit
+	permission: Skwe.basic.undo
+	trigger:
+		if {Skwe.undo.%player%::*} is set:
+			set {_index} to size of {Skwe.undo.%player%::*}
+			if arg-1 is "all":
+				set {_n} to {_index}
+			else if (arg-1 parsed as a number) <= {_index}:
+				set {_n} to (arg-1 parsed as a number)
+			else:
+				set {_n} to {_index}
+			loop {_n} times:
+				placeBlocks("undo", player)
+				message "&dUndo %loop-number%/%{_n}% complete. (%{_index} - loop-number% Undo actions remaining)"
+		else:
+			message "&dNothing to undo."
+
+
+command //redo [<text="1">]:
+	description: Reverse an undo operation to the way it was before
+	permission: Skwe.basic.redo
+	trigger:
+		if {Skwe.redo.%player%::*} is set:
+			set {_index} to size of {Skwe.redo.%player%::*}
+			if arg-1 is "all":
+				set {_n} to {_index}
+			else if (arg-1 parsed as a number) <= {_index}:
+				set {_n} to (arg-1 parsed as a number)
+			else:
+				set {_n} to {_index}
+			loop {_n} times:
+				placeBlocks("redo", player)
+				message "&dRedo %loop-number%/%{_n}% complete. (%{_index} - loop-number% Undo actions remaining)"
+		else:
+			message "&dNothing to redo."
+
+
+command //clearhistory:
+	aliases: //clearh, //clearhist
+	permission: Skwe.basic.clearhistory
+	description: Clears Undo and Redo history
+	trigger:
+		if {Skwe.redo.%player%::*} is set:
+			loop (size of {Skwe.redo.%player%::*}) times:
+				delete {Skwe.redo.%player%::%loop-number%::*}
+			delete {Skwe.redo.%player%::*}
+		if {Skwe.undo.%player%::*} is set:
+			loop (size of {Skwe.undo.%player%::*}) times:
+				delete {Skwe.undo.%player%::%loop-number%::*}
+			delete {Skwe.undo.%player%::*}
+		message "&dUndo & Redo data has been cleared."
+
+
+#----Selection----
+
+
+command //wand:
+	description: Gives the world edit tool
+	permission: Skwe.basic.wand
+	trigger:
+		give 1 wooden axe to player
+
+command //togglewand:
+	description: Toggle the Skwe wand on off
+	permission: Skwe.basic.wand
+	trigger:
+		if {Skwe.wandtoggle.%player%} is not set:
+			set {Skwe.wandtoggle.%player%} to false
+			message "&dSkWorldEdit wand has been disabled."
+		else:
+			set {Skwe.wandtoggle.%player%} to true
+			message "&dSkWorldEdit wand has been enabled."
+
+command //pos1 [<integer>] [<integer>] [<integer>]:
+	aliases: //position1
+	description: Sets the first boundary position for world edits
+	permission: Skwe.basic.pos
+	trigger:
+		if arg 1 is not set:
+			setPos(1, player, location of block below player)
+		else:
+			if arg 2 is set:
+				if arg 3 is set:
+					set {_loc} to location(arg 1, arg 2, arg 3, world("%player's world%"))
+					setPos(1, player, {_loc})
+				else:
+					message "&d//pos1 <x> <y> <z>"
+			else:
+				message "&d//pos1 <x> <y> <z>"
+
+command //pos2 [<integer>] [<integer>] [<integer>]:
+	aliases: //position2
+	description: Sets the second boundary position for world edits
+	permission: Skwe.basic.pos
+	trigger:
+		if arg 1 is not set:
+			setPos(2, player, location of block below player)
+		else:
+			if arg 2 is set:
+				if arg 3 is set:
+					set {_loc} to location(arg 1, arg 2, arg 3, world("%player's world%"))
+					setPos(2, player, {_loc})
+				else:
+					message "&d//pos2 <x> <y> <z>"
+			else:
+				message "&d//pos2 <x> <y> <z>"
+
+command //hpos1:
+	aliases: //hposition1
+	description: Sets the first boundary to the block you are looking at
+	permission: Skwe.basic.hpos
+	trigger:
+		if "%targeted block%" is not "<none>":
+			setPos(1, player, location of targeted block)
+		else:
+			message "&dMust be looking at a block."
+
+command //hpos2:
+	aliases: //hposition2
+	description: Sets the second boundary to the block you are looking at
+	permission: Skwe.basic.hpos
+	trigger:
+		if "%targeted block%" is not "<none>":
+			setPos(2, player, location of targeted block)
+		else:
+			message "&dMust be looking at a block."
+
+
+command //count [<text>]:
+	description: Counts the number of a specific block in the selection
+	permission: Skwe.basic.count
+	trigger:
+		if posIsSet(player):
+			if arg 1 is set:
+				ThreeDimOperation("count", player, arg-1, "none")
+			else:
+				message "&d//count <block>"
+		else:
+			message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+
+command //size:
+	description: Displays the size of the current selection
+	permission: Skwe.basic.size
+	trigger:
+		if posIsSet(player):
+			set {_xdiff} to abs({pos1.x.%player%} - {pos2.x.%player%}) + 1
+			set {_ydiff} to abs({pos1.y.%player%} - {pos2.y.%player%}) + 1
+			set {_zdiff} to abs({pos1.z.%player%} - {pos2.z.%player%}) + 1
+			#message "&7LOW: %{_xlow}% %{_ylow}% %{_zlow}% | &7HIGH: %high({pos1.x.%player%},{pos2.x.%player%})% %high({pos1.y.%player%},{pos2.y.%player%})% %high({pos1.z.%player%},{pos2.z.%player%})% &7DIFF: %{_xdiff}% %{_ydiff}% %{_zdiff}%"
+			set {_totalVolume} to {_xdiff}*{_ydiff}*{_zdiff}
+			message "&dSize of selection is %{_totalVolume}% block(s)"
+		else:
+			message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+
+
+command //distr:
+	aliases: //distribution
+	permission: Skwe.basic.distr
+	description: Calculates the block distribution of a selection
+	trigger:
+		if posIsSet(player):
+			ThreeDimOperation("distr", player, "2", "none")
+		else:
+			message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+
+
+command //shift [<integer>] [<text>]:
+	description: Shifts the selection region in a direction
+	permission: Skwe.basic.shift
+	trigger:
+		if arg 1 is set:
+			if arg 2 is set:
+				if arg-2 is "east" or "west" or "north" or "south" or "up" or "down" or "e" or "w" or "n" or "s":
+					shiftSelection(player, arg-2, arg-1)
+				else:
+					message "&dNot a valid direction. (use east/west/north/south/up/down)"
+			else:
+				if player's pitch < -65:
+					shiftSelection(player, "up", arg-1)
+				else if player's pitch > 65:
+					shiftSelection(player, "down", arg-1)
+				else:
+					shiftSelection(player, "%horizontal facing of player%", arg-1)
+		else:
+			message "&d//shift <number> (direction)"
+
+
+command //expand [<text>] [<text>] [<text>]:
+	permission: Skwe.basic.expand
+	description: Expand a selected region
+	trigger:
+		set {_arg1} to "none"
+		set {_arg2} to "none"
+		set {_arg3} to "none"
+		if arg 1 is set:
+			set {_arg1} to "%arg-1%"
+		if arg 2 is set:
+			set {_arg2} to "%arg-2%"
+		if arg 3 is set:
+			set {_arg3} to "%arg-3%"
+		expandContract(player, "expand", {_arg1}, {_arg2}, {_arg3})
+
+
+command //contract [<text>] [<text>] [<text>]:
+	permission: Skwe.basic.contract
+	description: Contract a selected region
+	trigger:
+		set {_arg1} to "none"
+		set {_arg2} to "none"
+		set {_arg3} to "none"
+		if arg 1 is set:
+			set {_arg1} to "%arg-1%"
+		if arg 2 is set:
+			set {_arg2} to "%arg-2%"
+		if arg 3 is set:
+			set {_arg3} to "%arg-3%"
+		expandContract(player, "contract", {_arg1}, {_arg2}, {_arg3})
+
+
+command //outlet [<integer>]:
+	permission: Skwe.basic.outlet
+	description: Expands region by same amount on all sides
+	trigger:
+		if arg 1 is set:
+			if posIsSet(player):
+				loop {directions::*}:
+					resizeSelection(player, "%loop-value%", arg 1, 0, "expandout")
+			else:
+				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+		else:
+			message "&d//outlet <number>"
+
+command //inlet [<integer>]:
+	permission: Skwe.basic.inlet
+	description: Contracts region by same amount on all sides
+	trigger:
+		if arg 1 is set:
+			if posIsSet(player):
+				loop {directions::*}:
+					resizeSelection(player, "%loop-value%", arg 1, 0, "contractin")
+			else:
+				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+		else:
+			message "&d//inlet <number>"
+
+
+#----Region Operations----
+
+command //set [<text>]:
+	description: Set an area to a certain block type
+	permission: Skwe.basic.set
+	trigger:
+		if arg-1 is set:
+			if posIsSet(player):
+				ThreeDimOperation("set", player, arg-1, "none")
+			else:
+				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+		else:
+			message "&d//set <item>"
+
+command //cut:
+	description: Removes all blocks in selection
+	permission: Skwe.basic.cut
+	trigger:
+		if posIsSet(player):
+			ThreeDimOperation("set", player, "0", "none")
+		else:
+			message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+
+
+command //sphere [<text>] [<number>]:
+	description: Create a sphere around player
+	permission: Skwe.basic.sphere
+	trigger:
+		if arg 1 is set:
+			if allValidItems(arg 1):
+				if arg 2 is set:
+					set {_count} to 0
+					set {_totalVolume} to 0
+					set {_currentCount} to 0
+					loop all blocks in radius arg-2 of player:
+						add 1 to {_totalVolume}
+					set {_index} to (size of {Skwe.undo.%player%::*} + 1)
+					loop all blocks in radius arg-2 of player:
+						set {_loc} to location of loop-block
+						actionBarProgress(player, {_currentCount}, {_totalVolume})
+						setUndo(player, {_loc}, {_index})
+						set block at {_loc} to parseMultiItem(player, arg 1)
+						add 1 to {_currentCount}
+						add 1 to {_count}
+						if {_count} >= {bps}:
+							set {_count} to 0
+							wait 1 tick
+					actionBarComplete(player)
+				else:
+					message "&d//sphere <items> <radius>"
+			else:
+				message "&dInvalid usage: %invalidItem(arg 1)% is not an item."
+		else:
+			message "&d//sphere <items> <radius>"
+
+
+command //hsphere [<text>] [<number>]:
+	description: Create a hollow sphere around player
+	permission: Skwe.basic.sphere
+	trigger:
+		if arg 1 is set:
+			if allValidItems(arg 1):
+				if arg 2 is set:
+					set {_count} to 0
+					set {_totalVolume} to 0
+					set {_currentCount} to 0
+					set {_startLoc} to location of block at player
+					loop all blocks in radius arg-2 of {_startLoc}:
+						add 1 to {_totalVolume}
+					set {_index} to (size of {Skwe.undo.%player%::*} + 1)
+					loop all blocks in radius arg-2 of {_startLoc}:
+						set {_loc} to location of loop-block
+						actionBarProgress(player, {_currentCount}, {_totalVolume})
+						if distance between loop-block and {_startLoc} is greater than (-1 + arg-2):
+							setUndo(player, {_loc}, {_index})
+							set block at {_loc} to parseMultiItem(player, arg 1)
+							add 1 to {_count}
+						else:
+							if type of block at location of {_loc} is not air:
+								setUndo(player, {_loc}, {_index})
+								set block at {_loc} to air
+								add 1 to {_count}
+						add 1 to {_currentCount}
+						if {_count} >= {bps}:
+							set {_count} to 0
+							wait 1 tick
+					actionBarComplete(player)
+				else:
+					message "&d//hsphere <items> <radius>"
+			else:
+				message "&dInvalid usage: %invalidItem(arg 1)% is not an item."
+		else:
+			message "&d//hsphere <items> <radius>"
+
+
+command //cyl [<text>] [<integer>] [<integer=1>]:
+	permission: Skwe.basic.cyl
+	description: Creates a cylinder around player
+	aliases: //cylinder
+	trigger:
+		if arg 1 is set:
+			if allValidItems(arg 1):
+				if arg 2 is set:
+					set {_count} to 0
+					set {_totalVolume} to 0
+					set {_currentCount} to 0
+					set {_startLoc} to location of block at player
+
+					loop all blocks in radius arg-2 of {_startLoc}:
+						if y-coordinate of location of loop-block = y-coordinate of {_startLoc}:
+							set {_loc} to location of loop-block
+							add 1 to {_totalVolume}
+							add {_loc} to {_cyl::*}
+
+					set {_totalVolume} to {_totalVolume} * arg-3
+					set {_index} to (size of {Skwe.undo.%player%::*} + 1)
+
+					loop arg-3 times:
+						loop {_cyl::*}:
+							set {_loc} to loop-value-2
+							add (-1 + loop-number-1) to y-coordinate of {_loc}
+							actionBarProgress(player, {_currentCount}, {_totalVolume})
+							setUndo(player, {_loc}, {_index})
+							set block at {_loc} to parseMultiItem(player, arg 1)
+							add 1 to {_currentCount}
+							add 1 to {_count}
+							if {_count} >= {bps}:
+								set {_count} to 0
+								wait 1 tick
+					actionBarComplete(player)
+				else:
+					message "&d//cyl <items> <radius> (height)"
+			else:
+				message "&dInvalid usage: %invalidItem(arg 1)% is not an item."
+		else:
+			message "&d//cyl <items> <radius> (height)"
+
+
+command //hcyl [<text>] [<integer>] [<integer=1>]:
+	permission: Skwe.basic.cyl
+	description: Creates a hollow cylinder around player
+	aliases: //hcylinder, //hollowcyl, //hollowcylinder
+	trigger:
+		if arg 1 is set:
+			if allValidItems(arg 1):
+				if arg 2 is set:
+					set {_count} to 0
+					set {_totalVolume} to 0
+					set {_currentCount} to 0
+					set {_startLoc} to location of block at player
+
+					loop all blocks in radius arg-2 of {_startLoc}:
+						if y-coordinate of location of loop-block = y-coordinate of {_startLoc}:
+							if distance between loop-block and {_startLoc} is greater than (-1 + arg-2):
+								set {_loc} to location of loop-block
+								add 1 to {_totalVolume}
+								add {_loc} to {_cyl::*}
+
+					set {_totalVolume} to {_totalVolume} * arg-3
+					set {_index} to (size of {Skwe.undo.%player%::*} + 1)
+
+					loop arg-3 times:
+						loop {_cyl::*}:
+							set {_loc} to loop-value-2
+							add (-1 + loop-number-1) to y-coordinate of {_loc}
+							actionBarProgress(player, {_currentCount}, {_totalVolume})
+							setUndo(player, {_loc}, {_index})
+							set block at {_loc} to parseMultiItem(player, arg 1)
+							add 1 to {_currentCount}
+							add 1 to {_count}
+							if {_count} >= {bps}:
+								set {_count} to 0
+								wait 1 tick
+					actionBarComplete(player)
+				else:
+					message "&d//hcyl <items> <radius> (height)"
+			else:
+				message "&dInvalid usage: %invalidItem(arg 1)% is not an item."
+		else:
+			message "&d//hcyl <items> <radius> (height)"
+
+
+command //replace [<text>] [<text>]:
+	permission: Skwe.basic.replace
+	description: Replaces one block type with another
+	trigger:
+		if arg-1 is set:
+			if posIsSet(player):
+				if arg 2 is set:
+					if allValidItems(arg 2):
+						ThreeDimOperation("replace", player, arg-1, arg-2)
+					else:
+						message "&dInvalid usage: %invalidItem(arg 2)% is not an item."
+				else:
+					ThreeDimOperation("replace", player, arg-1, "none")
+			else:
+				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+		else:
+			message "&d//replace <item> - To replace all air with item"
+			message "&d//replace <from-item> <to-item> - To replace all items from-item to to-item"
+
+
+command //walls [<text>]:
+	aliases: //wall
+	description: Build walls of the region (not including floor and ceiling)
+	permission: Skwe.basic.walls
+	trigger:
+		if arg 1 is set:
+			if posIsSet(player):
+				TwoDimOperation("walls", player, arg 1)
+			else:
+				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+		else:
+			message "&d//walls <item>"
+
+command //outline [<text>]:
+	description: Build outline of the region (including floor and ceiling)
+	permission: Skwe.basic.outline
+	trigger:
+		if arg 1 is set:
+			if posIsSet(player):
+				TwoDimOperation("outline", player, arg 1)
+			else:
+				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+		else:
+			message "&d//outline <item>"
+			
+
+command //overlay [<text>]:
+	permission: Skwe.basic.overlay
+	description: Places a layer of an item on top of everything in selection
+	trigger:
+		if arg 1 is set:
+			if posIsSet(player):
+				TwoDimOperation("overlay", player, arg 1)
+			else:
+				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+		else:
+			message "&d//overlay <item>"
+
+
+#-----Clipboards-----
+
+command //copy:
+	description: Set an area to a certain block type
+	permission: Skwe.basic.set
+	trigger:
+		if posIsSet(player):
+			set {_xlow} to low({pos1.x.%player%},{pos2.x.%player%})
+			set {_ylow} to low({pos1.y.%player%},{pos2.y.%player%})
+			set {_zlow} to low({pos1.z.%player%},{pos2.z.%player%})
+			set {_xdiff} to abs({pos1.x.%player%} - {pos2.x.%player%}) + 1
+			set {_ydiff} to abs({pos1.y.%player%} - {pos2.y.%player%}) + 1
+			set {_zdiff} to abs({pos1.z.%player%} - {pos2.z.%player%}) + 1
+			loop {_xdiff} times:
+				loop {_ydiff} times:
+					loop {_zdiff} times:
+						set {_xnum} to -1 + loop-number-1
+						set {_ynum} to -1 + loop-number-2
+						set {_znum} to -1 + loop-number-3
+						set {_x} to {_xlow} + {_xnum}
+						set {_y} to {_ylow} + {_ynum}
+						set {_z} to {_zlow} + {_znum}
+						set {_loc} to location({_x}, {_y}, {_z}, world("%player's world%"))
+						setCopy(player, {_loc}, horizontal facing of player)
+			message "&dSelection has been copied to clipboard."
+		else:
+			message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+
+
+#command //paste true
+#	description: Paste a selection without changing the direction
+#	permission: Skwe.basic.pastetrue
+#	trigger:
+
+
+
+
+command /Skwe [<text>]:
+	permission: Skwe.basic.main
+	description: Display script info
+	trigger:
+		if arg 1 is not set:
+			message "&7&l-----&8&l[&d&lSkWorldEdit&8&l]&7&l-----"
+			message "&5Developed By: &dTheJimmyJ57"
+			message "&5Version: &d{@version}"
+		if arg 1 is "help":
+			message "&7&l-----&8&l[&d&lSkWorldEdit&8&l]&7&l-----"
+			message "&8Region Selection:"
+			message "&d//wand"
+			message "&d//togglewand"
+			message "&d//pos1 & //pos2"
+			message "&d//hpos1 & //hpos2"
+			message "&d//size"
+			message "&d//count <block>"
+			message "&d//distr"
+			message "&d//expand <number> (direction)"
+			message "&d//contract <number> (direction)"
+			message "&d//shift <number> (direction)"
+
+
+
+command /test2 [<text>]:
+	trigger:
+		if (arg 1 parsed as an item) is not an item:
+			message "false"
+		else:
+			message "true"
