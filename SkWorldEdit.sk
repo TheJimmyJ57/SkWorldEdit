@@ -1369,7 +1369,7 @@ command //replacenear [<number>] [<text>] [<text>]:
 
 command //copy:
 	description: Set an area to a certain block type
-	permission: Skwe.basic.set
+	permission: Skwe.basic.copy
 	trigger:
 		if posIsSet(player):
 			message "&dBeginning copying to clipboard..."
@@ -1456,34 +1456,3 @@ command /Skwe [<text>]:
 			message "&d//expand <number> (direction)"
 			message "&d//contract <number> (direction)"
 			message "&d//shift <number> (direction)"
-
-
-
-command /test2 [<number>] [<number>] [<number>]:
-	trigger:
-		set {_plane1} to "x"
-		set {_plane2} to "z"
-		set {_x} to arg 1
-		set {_y} to 5
-		set {_z} to arg 2
-		set {_degrees} to arg 3
-		#loop {Skwe.clipboard.%player%::*}:
-			#set {_li::*} to loop-index split at ","
-			#set {_x} to {_li::1} parsed as a Number
-			#set {_y} to {_li::2} parsed as a Number
-			#set {_z} to {_li::3} parsed as a number
-		broadcast "&c%{_x}% | %{_y}% | %{_z}%"
-		broadcast "%-2.03*sin({_degrees})%"
-		set {_temp%{_plane1}%} to {_%{_plane1}%}
-		set {_temp%{_plane2}%} to {_%{_plane2}%}
-		set {_%{_plane1}%} to (({_temp%{_plane1}%} * cos({_degrees})) + ({_temp%{_plane2}%} * sin({_degrees})))
-		set {_%{_plane2}%} to (-1*({_temp%{_plane1}%} * sin({_degrees}))) + ({_temp%{_plane2}%} * cos({_degrees}))
-			#set {_coords} to "%{_x}%,%{_y}%,%{_z}%"
-		broadcast "&4%{_x}% | %{_y}% | %{_z}%"
-			#set {_block} to loop-value
-			#set {_templist::%{_coords}%} to {_block}
-
-		#delete {Skwe.clipboard.%{_p}%::*}
-		#loop {_templist::*}:
-	#		broadcast "&d%loop-index% | %loop-value%"
-	#		set {Skwe.clipboard.%{_p}%::%loop-index%} to loop-value
