@@ -32,19 +32,24 @@
 
 #//set <item>
 #//cut
-#//sphere <item> <radius>
-#//hsphere <item> <radius>
-#//cyl <item> <radius> (height)
-#//hcyl <item> <radius> (height)
 #//replace <item> - Replaces all air with specified item
 #//replace <from-item> <to-item> - Replaces all instances of from-item with to-item
 #//overlay <item> - Places a layer of <item> on top of every block in the selection
 #//walls <item>
 #//outline <item>
 
+#-----Utilities-----
+#//sphere <item> <radius>
+#//hsphere <item> <radius>
+#//cyl <item> <radius> (height)
+#//hcyl <item> <radius> (height)
+#//replacenear <radius> <from-item> <to-item> - Replaces all instances of from-item with to-item in radius
+
 #-----Clipboard-----
 
 #//copy
+#//paste
+#//rotate <y-axis> <x-axis> <z-axis>
 
 #--------------------------------------------
 #			Functions
@@ -66,6 +71,26 @@ on load:
 	add "south" to {directions::*}
 	add "up" to {directions::*}
 	add "down" to {directions::*}
+
+function cos(n: Number) :: Number:
+	if {_n} = 0:
+		return 1
+	else if {_n} = 90:
+		return 0
+	else if {_n} = 180:
+		return -1
+	else if {_n} = 270:
+		return 0
+
+function sin(n: Number) :: Number:
+	if {_n} = 0:
+		return 0
+	else if {_n} = 90:
+		return 1
+	else if {_n} = 180:
+		return 0
+	else if {_n} = 270:
+		return -1
 
 function abs(v1: Number) :: Number:
 	if {_v1} < 0:
@@ -127,6 +152,29 @@ function oppositeDir(dir: String) :: String:
 		return "down"
 	else if {_dir} is "down":
 		return "up"
+
+function rotateDiff(dir1: text, dir2: text) :: Number:
+	set {_rotateDir::0} to "north"
+	set {_rotateDir::270} to "east"
+	set {_rotateDir::180} to "south"
+	set {_rotateDir::90} to "west"
+	loop 4 times:
+		set {_datum} to {_rotateDir::0}
+		loop {_rotateDir::*}:
+			if {_dir1} is {_datum}:
+				if {_dir2} is loop-value-2:
+					return (loop-index parsed as a number)
+
+		loop {_rotateDir::*}:
+			set {_li} to (loop-index parsed as a number) + 90
+			if {_li} = 360:
+				set {_li} to 0
+			set {_lv} to loop-value-2
+			set {_list::%{_li}%} to {_lv}
+
+		loop {_list::*}:
+			set {_rotateDir::%loop-index%} to loop-value-2
+
 
 function actionBarProgress(p: Player, current: Number, max: Number):
 	set {_barSymbol} to "█"
@@ -201,16 +249,63 @@ function setUndo(p: Player, loc: Location, index: Number):
 	set {_block} to type of block at location of {_loc}
 	set {Skwe.undo.%{_p}%::%{_index}%::%{_coords}%} to {_block}
 
-function setCopy(p: Player, loc: Location, dir: Direction):
-	set {_x} to x-coordinate of {_loc}
-	set {_y} to y-coordinate of {_loc}
-	set {_z} to z-coordinate of {_loc}
-	set {_coords} to "%{_x}%,%{_y}%,%{_z}%,%{_dir}%"
+function setCopy(p: Player, loc: Location):
+	set {_center} to location of {_p}
+	set {_x} to x-coordinate of {_loc} - x-coordinate of {_center}
+	set {_y} to y-coordinate of {_loc} - y-coordinate of {_center}
+	set {_z} to z-coordinate of {_loc} - z-coordinate of {_center}
+	set {_dir} to horizontal facing of {_p}
+	set {_coords} to "%{_x}%,%{_y}%,%{_z}%"
 	set {_block} to type of block at location of {_loc}
-	set {Skwe.copy.%{_p}%::%{_coords}%} to {_block}
+	set {Skwe.clipboard.%{_p}%::%{_coords}%} to {_block}
 
-function paste(p: Player, type: String):
-	broadcast "paste"
+function paste(p: Player):
+	set {_count} to 0
+	set {_currentCount} to 0
+	set {_totalVolume} to size of {Skwe.clipboard.%{_p}%::*}
+	set {_index} to (size of {Skwe.undo.%{_p}%::*} + 1)
+	set {_location} to location of {_p}
+	loop {Skwe.clipboard.%{_p}%::*}:
+		set {_li::*} to loop-index split at ","
+		set {_x} to {_li::1} parsed as a Number
+		set {_y} to {_li::2} parsed as a Number
+		set {_z} to {_li::3} parsed as a number
+		if {Skwe.rotate.y.%{_p}%} is not 0:
+			set {_tempx} to {_x}
+			set {_tempz} to {_z}
+			set {_x} to rotateBlocks("x", "x", "z", {_tempx}, {_tempz}, {Skwe.rotate.y.%{_p}%})
+			set {_z} to rotateBlocks("z", "x", "z", {_tempx}, {_tempz}, {Skwe.rotate.y.%{_p}%})
+		if {Skwe.rotate.x.%{_p}%} is not 0:
+			set {_tempz} to {_z}
+			set {_tempy} to {_y}
+			set {_z} to rotateBlocks("z", "z", "y", {_tempz}, {_tempy}, {Skwe.rotate.x.%{_p}%})
+			set {_y} to rotateBlocks("y", "z", "y", {_tempz}, {_tempy}, {Skwe.rotate.x.%{_p}%})
+		if {Skwe.rotate.z.%{_p}%} is not 0:
+			set {_tempx} to {_x}
+			set {_tempy} to {_y}
+			set {_x} to rotateBlocks("x", "x", "y", {_tempx}, {_tempy}, {Skwe.rotate.z.%{_p}%})
+			set {_y} to rotateBlocks("y", "x", "y", {_tempx}, {_tempy}, {Skwe.rotate.z.%{_p}%})
+		set {_item} to loop-value
+		set {_loc} to {_location}
+		add {_x} to x-coordinate of {_loc}
+		add {_y} to y-coordinate of {_loc}
+		add {_z} to z-coordinate of {_loc}
+		setUndo({_p}, {_loc}, {_index})
+		set block at {_loc} to {_item}
+		actionBarProgress({_p}, {_currentCount}, {_totalVolume})
+		add 1 to {_count}
+		add 1 to {_currentCount}
+		if {_count} >= {bps}:
+			set {_count} to 0
+			wait 1 tick
+	actionBarComplete({_p})
+
+function rotateBlocks(output: String, plane1: String, plane2: String, num1: Number, num2: Number, degrees: Number) :: Number:
+	set {_temp%{_plane1}%} to {_num1}
+	set {_temp%{_plane2}%} to {_num2}
+	set {_%{_plane1}%} to ({_temp%{_plane1}%} * cos({_degrees})) + ({_temp%{_plane2}%} * sin({_degrees}))
+	set {_%{_plane2}%} to (-1*({_temp%{_plane1}%} * sin({_degrees}))) + ({_temp%{_plane2}%} * cos({_degrees}))
+	return {_%{_output}%}
 
 function resizePos(p: Player, coord: String, negativeDir: Boolean) :: Number:
 	if {_negativeDir} is false:
@@ -545,6 +640,14 @@ function ThreeDimOperation(type: String, p:Player, i: String, toItem: String):
 		set {_zdiff} to abs({pos1.z.%{_p}%} - {pos2.z.%{_p}%}) + 1
 		set {_count} to 0
 		set {_totalVolume} to {_xdiff}*{_ydiff}*{_zdiff}
+		if {_type} is "copy":
+			if {Skwe.clipboard.%{_p}%::*} is set:
+				delete {Skwe.clipboard.%{_p}%::*}
+				delete {Skwe.clipboarddir.%{_p}%}
+			set {Skwe.rotate.x.%{_p}%} to 0
+			set {Skwe.rotate.y.%{_p}%} to 0
+			set {Skwe.rotate.z.%{_p}%} to 0
+			set {Skwe.clipboarddir.%{_p}%} to "%horizontal facing of {_p}%"
 		if {_totalVolume} > {limit}:
 			if {_p} doesn't have permission "Skwe.limit.exempt":
 				message "&dAction cannot be performed as it exceeds the max block limit per action." to {_p}
@@ -610,25 +713,30 @@ function ThreeDimOperation(type: String, p:Player, i: String, toItem: String):
 							set {_count} to 0
 							wait 1 tick
 
+					else if {_type} is "copy":
+						setCopy({_p}, {_loc})
 
 		#Post Loop Action
 		if {_type} is "set" or "replace":
 			actionBarComplete({_p})
+
 		else if {_type} is "count":
 			loop (size of {_items::*}) times:
 				set {_b} to {_blockCount::%loop-number%}
 				set {_i} to "%{_items::%loop-number%} parsed as an item%"
 				replace all " block" in {_i} with ""
 				message "&d%{_b}% %{_i}% block(s) within the selection." to {_p}
+
 		else if {_type} is "distr":
 			message "&8Block Distribution:" to {_p}
 			loop {_distr::*}:
 				message "&d%loop-index%: %(loop-value/{_totalVolume}) * 100%%%" to {_p}
 
+		else if {_type} is "copy":
+			message "&dSelection has been successfully copied to clipboard." to {_p}
+
 	else:
 		message "&dInvalid usage: %invalidItem({_i})% is not an item." to {_p}
-
-
 
 
 #--------------------------------------------
@@ -638,7 +746,7 @@ function ThreeDimOperation(type: String, p:Player, i: String, toItem: String):
 #Setting pos2
 on rightclick:
 	if player has permission "Skwe.basic.wand":
-		if {Skwe.wandtoggle.%player%} is not false:
+		if {Skwe.wandtoggle.%player%} is not set:
 			if clicked block is set:
 				if player's tool is wooden axe:
 					setPos(2, player, location of clicked block)
@@ -647,15 +755,16 @@ on rightclick:
 #Setting pos1
 on leftclick:
 	if player has permission "Skwe.basic.wand":
-		if {Skwe.wandtoggle.%player%} is not false:
+		if {Skwe.wandtoggle.%player%} is not set:
 			if clicked block is set:
 				if player's tool is wooden axe:
 					setPos(1, player, location of clicked block)
 					cancel event
 
 on disconnect:
-	if {Skwe.copy.%player%::*} is set:
-		delete {Skwe.copy.%player%::*}
+	if {Skwe.clipboard.%player%::*} is set:
+		delete {Skwe.clipboard.%player%::*}
+		delete {Skwe.clipboarddir.%player%}
 	if {Skwe.redo.%player%::*} is set:
 		loop (size of {Skwe.redo.%player%::*}) times:
 			delete {Skwe.redo.%player%::%loop-number%::*}
@@ -670,6 +779,9 @@ on disconnect:
 	delete {pos2.x.%player%}
 	delete {pos2.y.%player%}
 	delete {pos2.z.%player%}
+	delete {Skwe.rotate.x.%player%}
+	delete {Skwe.rotate.y.%player%}
+	delete {Skwe.rotate.z.%player%}
 
 #--------------------------------------------
 #			Commands
@@ -767,7 +879,7 @@ command //togglewand:
 			set {Skwe.wandtoggle.%player%} to false
 			message "&dSkWorldEdit wand has been disabled."
 		else:
-			set {Skwe.wandtoggle.%player%} to true
+			delete {Skwe.wandtoggle.%player%}
 			message "&dSkWorldEdit wand has been enabled."
 
 command //pos1 [<integer>] [<integer>] [<integer>]:
@@ -892,11 +1004,11 @@ command //expand [<text>] [<text>] [<text>]:
 		set {_arg2} to "none"
 		set {_arg3} to "none"
 		if arg 1 is set:
-			set {_arg1} to "%arg-1%"
+			set {_arg1} to arg-1
 		if arg 2 is set:
-			set {_arg2} to "%arg-2%"
+			set {_arg2} to arg-2
 		if arg 3 is set:
-			set {_arg3} to "%arg-3%"
+			set {_arg3} to arg-3
 		expandContract(player, "expand", {_arg1}, {_arg2}, {_arg3})
 
 
@@ -908,11 +1020,11 @@ command //contract [<text>] [<text>] [<text>]:
 		set {_arg2} to "none"
 		set {_arg3} to "none"
 		if arg 1 is set:
-			set {_arg1} to "%arg-1%"
+			set {_arg1} to arg-1
 		if arg 2 is set:
-			set {_arg2} to "%arg-2%"
+			set {_arg2} to arg-2
 		if arg 3 is set:
-			set {_arg3} to "%arg-3%"
+			set {_arg3} to arg-3
 		expandContract(player, "contract", {_arg1}, {_arg2}, {_arg3})
 
 
@@ -966,6 +1078,67 @@ command //cut:
 		else:
 			message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
 
+
+command //replace [<text>] [<text>]:
+	permission: Skwe.basic.replace
+	description: Replaces one block type with another
+	trigger:
+		if arg-1 is set:
+			if posIsSet(player):
+				if arg 2 is set:
+					if allValidItems(arg 2):
+						ThreeDimOperation("replace", player, arg-1, arg-2)
+					else:
+						message "&dInvalid usage: %invalidItem(arg 2)% is not an item."
+				else:
+					ThreeDimOperation("replace", player, arg-1, "none")
+			else:
+				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+		else:
+			message "&d//replace <item> - To replace all air with item"
+			message "&d//replace <from-item> <to-item> - To replace all items from-item to to-item"
+
+
+command //walls [<text>]:
+	aliases: //wall
+	description: Build walls of the region (not including floor and ceiling)
+	permission: Skwe.basic.walls
+	trigger:
+		if arg 1 is set:
+			if posIsSet(player):
+				TwoDimOperation("walls", player, arg 1)
+			else:
+				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+		else:
+			message "&d//walls <item>"
+
+command //outline [<text>]:
+	description: Build outline of the region (including floor and ceiling)
+	permission: Skwe.basic.outline
+	trigger:
+		if arg 1 is set:
+			if posIsSet(player):
+				TwoDimOperation("outline", player, arg 1)
+			else:
+				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+		else:
+			message "&d//outline <item>"
+			
+
+command //overlay [<text>]:
+	permission: Skwe.basic.overlay
+	description: Places a layer of an item on top of everything in selection
+	trigger:
+		if arg 1 is set:
+			if posIsSet(player):
+				TwoDimOperation("overlay", player, arg 1)
+			else:
+				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+		else:
+			message "&d//overlay <item>"
+
+
+#-----Utilities-----
 
 command //sphere [<text>] [<number>]:
 	description: Create a sphere around player
@@ -1124,64 +1297,72 @@ command //hcyl [<text>] [<integer>] [<integer=1>]:
 		else:
 			message "&d//hcyl <items> <radius> (height)"
 
-
-command //replace [<text>] [<text>]:
-	permission: Skwe.basic.replace
-	description: Replaces one block type with another
+command //replacenear [<number>] [<text>] [<text>]:
+	permission: Skwe.basic.replacenear
+	description: Replace blocks with a different block type in a radius
+	aliases: //rnear
 	trigger:
 		if arg-1 is set:
-			if posIsSet(player):
-				if arg 2 is set:
+			if arg-2 is set:
+				if arg-3 is set:
 					if allValidItems(arg 2):
-						ThreeDimOperation("replace", player, arg-1, arg-2)
+						if allValidItems(arg 3):
+							set {_count} to 0
+							set {_totalVolume} to 0
+							set {_currentCount} to 0
+							set {_startLoc} to location of block at player
+							set {_index} to (size of {Skwe.undo.%player%::*} + 1)
+							set {_items::*} to arg 2 split at ","
+							loop all blocks in radius arg-1 of player:
+								add 1 to {_totalVolume}
+							loop all blocks in radius arg-1 of {_startLoc}:
+								set {_loc} to location of loop-block
+								loop {_items::*}:
+									set {_lv} to loop-value-2
+									if block at {_loc} is ({_lv} parsed as an item):
+										setUndo(player, {_loc}, {_index})
+										set block at {_loc} to parseMultiItem({_p}, arg 3)
+										actionBarProgress({_p}, {_currentCount}, {_totalVolume})
+										add 1 to {_count}
+								add 1 to {_currentCount}
+								add 1 to {_count}
+								if {_count} >= {bps}:
+									set {_count} to 0
+									wait 1 tick
+							actionBarComplete(player)
+						else:
+							message "&dInvalid usage: %invalidItem(arg 3)% is not an item."
 					else:
 						message "&dInvalid usage: %invalidItem(arg 2)% is not an item."
+				else if allValidItems(arg 2):
+					set {_count} to 0
+					set {_totalVolume} to 0
+					set {_currentCount} to 0
+					set {_startLoc} to location of block at player
+					set {_index} to (size of {Skwe.undo.%player%::*} + 1)
+					loop all blocks in radius arg-1 of player:
+						add 1 to {_totalVolume}
+					loop all blocks in radius arg-1 of {_startLoc}:
+						set {_loc} to location of loop-block
+						actionBarProgress(player, {_currentCount}, {_totalVolume})
+						if block at {_loc} is air:
+							setUndo(player, {_loc}, {_index})
+							set block at {_loc} to parseMultiItem(player, arg 2)
+						add 1 to {_currentCount}
+						add 1 to {_count}
+						if {_count} >= {bps}:
+							set {_count} to 0
+							wait 1 tick
+					actionBarComplete(player)
 				else:
-					ThreeDimOperation("replace", player, arg-1, "none")
+					message "&dInvalid usage: %invalidItem(arg 2)% is not an item."
 			else:
-				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
+				message "&d//replace <radius> <item> - To replace all air with item in radius"
+				message "&d//replace <radius> <from-item> <to-item> - To replace all items from-item to to-item in radius"
 		else:
-			message "&d//replace <item> - To replace all air with item"
-			message "&d//replace <from-item> <to-item> - To replace all items from-item to to-item"
+			message "&d//replace <radius> <item> - To replace all air with item in radius"
+			message "&d//replace <radius> <from-item> <to-item> - To replace all items from-item to to-item in radius"
 
-
-command //walls [<text>]:
-	aliases: //wall
-	description: Build walls of the region (not including floor and ceiling)
-	permission: Skwe.basic.walls
-	trigger:
-		if arg 1 is set:
-			if posIsSet(player):
-				TwoDimOperation("walls", player, arg 1)
-			else:
-				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
-		else:
-			message "&d//walls <item>"
-
-command //outline [<text>]:
-	description: Build outline of the region (including floor and ceiling)
-	permission: Skwe.basic.outline
-	trigger:
-		if arg 1 is set:
-			if posIsSet(player):
-				TwoDimOperation("outline", player, arg 1)
-			else:
-				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
-		else:
-			message "&d//outline <item>"
-			
-
-command //overlay [<text>]:
-	permission: Skwe.basic.overlay
-	description: Places a layer of an item on top of everything in selection
-	trigger:
-		if arg 1 is set:
-			if posIsSet(player):
-				TwoDimOperation("overlay", player, arg 1)
-			else:
-				message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
-		else:
-			message "&d//overlay <item>"
 
 
 #-----Clipboards-----
@@ -1191,32 +1372,65 @@ command //copy:
 	permission: Skwe.basic.set
 	trigger:
 		if posIsSet(player):
-			set {_xlow} to low({pos1.x.%player%},{pos2.x.%player%})
-			set {_ylow} to low({pos1.y.%player%},{pos2.y.%player%})
-			set {_zlow} to low({pos1.z.%player%},{pos2.z.%player%})
-			set {_xdiff} to abs({pos1.x.%player%} - {pos2.x.%player%}) + 1
-			set {_ydiff} to abs({pos1.y.%player%} - {pos2.y.%player%}) + 1
-			set {_zdiff} to abs({pos1.z.%player%} - {pos2.z.%player%}) + 1
-			loop {_xdiff} times:
-				loop {_ydiff} times:
-					loop {_zdiff} times:
-						set {_xnum} to -1 + loop-number-1
-						set {_ynum} to -1 + loop-number-2
-						set {_znum} to -1 + loop-number-3
-						set {_x} to {_xlow} + {_xnum}
-						set {_y} to {_ylow} + {_ynum}
-						set {_z} to {_zlow} + {_znum}
-						set {_loc} to location({_x}, {_y}, {_z}, world("%player's world%"))
-						setCopy(player, {_loc}, horizontal facing of player)
-			message "&dSelection has been copied to clipboard."
+			message "&dBeginning copying to clipboard..."
+			ThreeDimOperation("copy", player, "0", "none")
 		else:
 			message "&dNo selection set. (Use //pos1 and //pos2 or //wand)"
 
+command //paste:
+	description: Paste clipboard contents based on location and facing direction
+	permission: Skwe.basic.paste
+	trigger:
+		if {Skwe.clipboard.%player%::*} is set:
+			setRotations(player, "y", rotateDiff({Skwe.clipboarddir.%player%}, "%horizontal facing of player%"))
+			paste(player)
+		else:
+			message "&dClipboard is empty. (Use //copy)"
 
-#command //paste true
-#	description: Paste a selection without changing the direction
-#	permission: Skwe.basic.pastetrue
-#	trigger:
+function setRotations(p: Player, plane: String, degrees: Number):
+	add {_degrees} to {Skwe.rotate.%{_plane}%.%{_p}%}
+	if {Skwe.rotate.%{_plane}%.%{_p}%} = 360:
+		set {Skwe.rotate.%{_plane}%.%{_p}%} to 0
+	while {Skwe.rotate.%{_plane}%.%{_p}%} > 360:
+		set {Skwe.rotate.%{_plane}%.%{_p}%} to ({Skwe.rotate.%{_plane}%.%{_p}%} - 360)
+
+
+command //rotate [<number=0>] [<number=0>] [<number=0>]:
+	description: Rotate the clipboard selection
+	permission: Skwe.basic.rotate
+	trigger:
+		if {Skwe.clipboard.%player%::*} is set:
+			if arg 1 is 0 or 90 or 180 or 270 or 360:
+			#rotateBlocks(player, "x", "z", arg 1)
+				if arg 2 is 0 or 90 or 180 or 270 or 360:
+				#rotateBlocks(player, "x", "z", arg 1)
+					if arg 3 is 0 or 90 or 180 or 270 or 360:
+					#rotateBlocks(player, "x", "z", arg 1)
+						setRotations(player, "y", arg 1)
+						setRotations(player, "x", arg 2)
+						setRotations(player, "z", arg 3)
+						if arg 1 is not 0:
+							add "%arg 1% degrees (y-axis)" to {_rotatemsg::*}
+						if arg 2 is not 0:
+							add "%arg 2% degrees (x-axis)" to {_rotatemsg::*}
+						if arg 3 is not 0:
+							add "%arg 3% degrees (z-axis)" to {_rotatemsg::*}
+						if (size of {_rotatemsg::*}) < 1:
+							message "&dNo rotation applied"
+						else:
+							set {_msg} to join {_rotatemsg::*} by ", "
+							message "&dSelection has been rotated %{_msg}%"
+					else:
+						message "&d%arg-3% is not a valid angle (Try 0, 90, 180, 270)"
+				else:
+					message "&d%arg-2% is not a valid angle (Try 0, 90, 180, 270)"
+			else:
+				message "&d%arg-1% is not a valid angle (Try 0, 90, 180, 270)"
+		else:
+			message "&d//rotate <degrees y-axis> (degrees x-axis) (degrees z-axis)"
+
+
+
 
 
 
@@ -1245,9 +1459,31 @@ command /Skwe [<text>]:
 
 
 
-command /test2 [<text>]:
+command /test2 [<number>] [<number>] [<number>]:
 	trigger:
-		if (arg 1 parsed as an item) is not an item:
-			message "false"
-		else:
-			message "true"
+		set {_plane1} to "x"
+		set {_plane2} to "z"
+		set {_x} to arg 1
+		set {_y} to 5
+		set {_z} to arg 2
+		set {_degrees} to arg 3
+		#loop {Skwe.clipboard.%player%::*}:
+			#set {_li::*} to loop-index split at ","
+			#set {_x} to {_li::1} parsed as a Number
+			#set {_y} to {_li::2} parsed as a Number
+			#set {_z} to {_li::3} parsed as a number
+		broadcast "&c%{_x}% | %{_y}% | %{_z}%"
+		broadcast "%-2.03*sin({_degrees})%"
+		set {_temp%{_plane1}%} to {_%{_plane1}%}
+		set {_temp%{_plane2}%} to {_%{_plane2}%}
+		set {_%{_plane1}%} to (({_temp%{_plane1}%} * cos({_degrees})) + ({_temp%{_plane2}%} * sin({_degrees})))
+		set {_%{_plane2}%} to (-1*({_temp%{_plane1}%} * sin({_degrees}))) + ({_temp%{_plane2}%} * cos({_degrees}))
+			#set {_coords} to "%{_x}%,%{_y}%,%{_z}%"
+		broadcast "&4%{_x}% | %{_y}% | %{_z}%"
+			#set {_block} to loop-value
+			#set {_templist::%{_coords}%} to {_block}
+
+		#delete {Skwe.clipboard.%{_p}%::*}
+		#loop {_templist::*}:
+	#		broadcast "&d%loop-index% | %loop-value%"
+	#		set {Skwe.clipboard.%{_p}%::%loop-index%} to loop-value
