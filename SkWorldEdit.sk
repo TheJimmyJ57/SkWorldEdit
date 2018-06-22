@@ -56,7 +56,7 @@
 #--------------------------------------------
 
 options:
-	version: 1.0
+	version: 1.0.2
 
 
 variables:
@@ -1320,15 +1320,15 @@ command //replacenear [<number>] [<text>] [<text>]:
 								loop {_items::*}:
 									set {_lv} to loop-value-2
 									if block at {_loc} is ({_lv} parsed as an item):
+										actionBarProgress(player, {_currentCount}, {_totalVolume})
 										setUndo(player, {_loc}, {_index})
 										set block at {_loc} to parseMultiItem({_p}, arg 3)
-										actionBarProgress({_p}, {_currentCount}, {_totalVolume})
 										add 1 to {_count}
-								add 1 to {_currentCount}
-								add 1 to {_count}
-								if {_count} >= {bps}:
-									set {_count} to 0
-									wait 1 tick
+										add 1 to {_currentCount}
+										add 1 to {_count}
+										if {_count} >= {bps}:
+											set {_count} to 0
+											wait 1 tick
 							actionBarComplete(player)
 						else:
 							message "&dInvalid usage: %invalidItem(arg 3)% is not an item."
@@ -1344,24 +1344,24 @@ command //replacenear [<number>] [<text>] [<text>]:
 						add 1 to {_totalVolume}
 					loop all blocks in radius arg-1 of {_startLoc}:
 						set {_loc} to location of loop-block
-						actionBarProgress(player, {_currentCount}, {_totalVolume})
 						if block at {_loc} is air:
+							actionBarProgress(player, {_currentCount}, {_totalVolume})
 							setUndo(player, {_loc}, {_index})
 							set block at {_loc} to parseMultiItem(player, arg 2)
-						add 1 to {_currentCount}
-						add 1 to {_count}
-						if {_count} >= {bps}:
-							set {_count} to 0
-							wait 1 tick
+							add 1 to {_currentCount}
+							add 1 to {_count}
+							if {_count} >= {bps}:
+								set {_count} to 0
+								wait 1 tick
 					actionBarComplete(player)
 				else:
 					message "&dInvalid usage: %invalidItem(arg 2)% is not an item."
 			else:
-				message "&d//replace <radius> <item> - To replace all air with item in radius"
-				message "&d//replace <radius> <from-item> <to-item> - To replace all items from-item to to-item in radius"
+				message "&d//replacenear <radius> <item> - To replace all air with item in radius"
+				message "&d//replacenear <radius> <from-item> <to-item> - To replace all items from-item to to-item in radius"
 		else:
-			message "&d//replace <radius> <item> - To replace all air with item in radius"
-			message "&d//replace <radius> <from-item> <to-item> - To replace all items from-item to to-item in radius"
+			message "&d//replacenear <radius> <item> - To replace all air with item in radius"
+			message "&d//replacenear <radius> <from-item> <to-item> - To replace all items from-item to to-item in radius"
 
 
 
